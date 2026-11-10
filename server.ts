@@ -1,4 +1,7 @@
-import { createServer, type IncomingMessage } from "node:http";
+import { Hono } from "hono";
+import { cors } from "hono/cors";
+import { logger } from "hono/logger";
+import { serve } from "@hono/node-server";
 import { freeTimes, nearestFreeTime, type Booking, type OpeningHours } from "./slots.ts";
 
 // The clinic's opening hours, by weekday (0 is Sunday).
@@ -22,64 +25,34 @@ const bookings: Booking[] = [
   { date: "2026-11-11", start: "11:00", end: "12:00" },
 ];
 
-// Read the whole body of a request as text.
-async function readBody(request: IncomingMessage): Promise<string> {
-  let body = "";
-  for await (const chunk of request) body += chunk;
-  return body;
+function addMinutes(time: string, minutes: number): string {
+  const total = Number(time.slice(0, 2)) * 60 + Number(time.slice(3)) + minutes;
+  return String(Math.floor(total / 60)).padStart(2, "0") + ":" + String(total % 60).padStart(2, "0");
 }
 
-const server = createServer(async (request, response) => {
-  const url = new URL(request.url!, "http://localhost");
-  // When the answer has gone, print the request and its status, like "POST /bookings 201".
-  response.on("finish", () => console.log(request.method, url.pathname + url.search, response.statusCode));
+const app = new Hono();
+app.use(logger());
+app.use(cors({ origin: "http://localhost:5173" }));
 
-  // The page on localhost:5173 may read our answers.
-  response.setHeader("Access-Control-Allow-Origin", "http://localhost:5173");
-
-  if (request.method === "GET" && url.pathname === "/free-times") {
-    const date = url.searchParams.get("date")!;
-    const length = lengths[url.searchParams.get("service")!];
-    const closed = hours[new Date(date + "T12:00").getDay()] === "closed";
-    const answer = {
-      closed,
-      times: freeTimes(date, length, hours, bookings),
-      nearest: closed ? nearestFreeTime(date, length, hours, bookings) : null,
-    };
-    response.writeHead(200, { "Content-Type": "application/json" });
-    response.end(JSON.stringify(answer));
-    return;
-  }
-
-  // Before a POST with JSON, the browser asks first whether it may send one.
-  if (request.method === "OPTIONS") {
-    response.writeHead(204, {
-      "Access-Control-Allow-Methods": "GET, POST",
-      "Access-Control-Allow-Headers": "Content-Type",
-    });
-    response.end();
-    return;
-  }
-
-  if (request.method === "POST" && url.pathname === "/bookings") {
-    const booking = JSON.parse(await readBody(request));
-    const length = lengths[booking.service];
-    if (!freeTimes(booking.date, length, hours, bookings).includes(booking.time)) {
-      response.writeHead(409, { "Content-Type": "application/json" });
-      response.end(JSON.stringify({ error: "That time is no longer free." }));
-      return;
-    }
-    const start = Number(booking.time.slice(0, 2)) * 60 + Number(booking.time.slice(3));
-    const end = start + length;
-    const endTime = String(Math.floor(end / 60)).padStart(2, "0") + ":" + String(end % 60).padStart(2, "0");
-    bookings.push({ date: booking.date, start: booking.time, end: endTime });
-    response.writeHead(201, { "Content-Type": "application/json" });
-    response.end(JSON.stringify({ date: booking.date, time: booking.time }));
-    return;
-  }
-
-  response.writeHead(404, { "Content-Type": "application/json" });
-  response.end(JSON.stringify({ error: "Not found" }));
+app.get("/free-times", (c) => {
+  const date = c.req.query("date")!;
+  const length = lengths[c.req.query("service")!];
+  const closed = hours[new Date(date + "T12:00").getDay()] === "closed";
+  return c.json({
+    closed,
+    times: freeTimes(date, length, hours, bookings),
+    nearest: closed ? nearestFreeTime(date, length, hours, bookings) : null,
+  });
 });
 
-server.listen(3000, () => console.log("Listening on http://localhost:3000"));
+app.post("/bookings", async (c) => {
+  const booking = await c.req.json();
+  const length = lengths[booking.service];
+  if (!freeTimes(booking.date, length, hours, bookings).includes(booking.time)) {
+    return c.json({ error: "That time is no longer free." }, 409);
+  }
+  bookings.push({ date: booking.date, start: booking.time, end: addMinutes(booking.time, length) });
+  return c.json({ date: booking.date, time: booking.time }, 201);
+});
+
+serve({ fetch: app.fetch, port: 3000 }, () => console.log("Listening on http://localhost:3000"));
