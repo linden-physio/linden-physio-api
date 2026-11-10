@@ -1,0 +1,14 @@
+{
+  "name": "linden-physio-api",
+  "private": true,
+  "type": "module",
+  "scripts": {
+    "start": "node --watch server.ts",
+    "typecheck": "tsc",
+    "test": "node --test"
+  },
+  "devDependencies": {
+    "@types/node": "22.20.5",
+    "typescript": "7.0.2"
+  }
+}
