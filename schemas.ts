@@ -18,7 +18,7 @@ export type NewBooking = z.infer<typeof NewBooking>;
 
 export const FreeTimes = z.object({
   closed: z.boolean(),
-  times: z.array(z.object({ start: z.iso.datetime() })),
-  nearest: z.object({ date: z.iso.date(), start: z.iso.datetime() }).nullable(),
+  times: z.array(z.object({ startsAt: z.iso.datetime() })),
+  nearest: z.object({ date: z.iso.date(), startsAt: z.iso.datetime() }).nullable(),
 });
 export type FreeTimes = z.infer<typeof FreeTimes>;

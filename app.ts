@@ -110,8 +110,8 @@ export function makeApp(db: NodePgDatabase) {
       : null;
     const answer: FreeTimes = {
       closed,
-      times: times.map((time) => ({ start: toInstant(date, time) })),
-      nearest: nearest && { date: nearest.date, start: toInstant(nearest.date, nearest.time) },
+      times: times.map((time) => ({ startsAt: toInstant(date, time) })),
+      nearest: nearest && { date: nearest.date, startsAt: toInstant(nearest.date, nearest.time) },
     };
     return c.json(answer);
   });
