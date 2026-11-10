@@ -26,6 +26,9 @@ const server = createServer((request, response) => {
   const url = new URL(request.url!, "http://localhost");
   console.log(request.method, url.pathname + url.search);
 
+  // The page on localhost:5173 may read our answers.
+  response.setHeader("Access-Control-Allow-Origin", "http://localhost:5173");
+
   if (request.method === "GET" && url.pathname === "/free-times") {
     const date = url.searchParams.get("date")!;
     const length = lengths[url.searchParams.get("service")!];
