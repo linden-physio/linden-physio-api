@@ -94,7 +94,12 @@ export function makeApp(db: NodePgDatabase, allowedOrigins: string[], now: () =>
 
   const app = new Hono();
   app.use(logger());
-  app.use(cors({ origin: allowedOrigins }));
+  // Each environment names the origins it allows. A * stands for any run of letters, digits and
+  // dashes, because each preview of the page gets its own address.
+  const patterns = allowedOrigins.map(
+    (origin) => new RegExp("^" + origin.replaceAll(".", "\\.").replaceAll("*", "[a-z0-9-]+") + "$"),
+  );
+  app.use(cors({ origin: (origin) => (patterns.some((pattern) => pattern.test(origin)) ? origin : null) }));
 
   app.get("/free-times", async (c) => {
     const query = FreeTimesQuery.safeParse(c.req.query());
