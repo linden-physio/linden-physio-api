@@ -2,6 +2,7 @@ import { Hono } from "hono";
 import { cors } from "hono/cors";
 import { logger } from "hono/logger";
 import pg from "pg";
+import { toInstant, fromInstant } from "./clock.ts";
 import { freeTimes, nearestFreeTime, type Booking, type OpeningHours } from "./slots.ts";
 
 // The clinic's opening hours, by weekday (0 is Sunday).
@@ -45,25 +46,27 @@ export function makeApp(db: pg.Pool) {
     const bookings = await bookingsFrom(date);
     const length = lengths[c.req.query("service")!];
     const closed = hours[new Date(date + "T12:00").getDay()] === "closed";
+    const nearest = closed ? nearestFreeTime(date, length, hours, bookings) : null;
     return c.json({
       closed,
-      times: freeTimes(date, length, hours, bookings),
-      nearest: closed ? nearestFreeTime(date, length, hours, bookings) : null,
+      times: freeTimes(date, length, hours, bookings).map((time) => ({ start: toInstant(date, time) })),
+      nearest: nearest && { date: nearest.date, start: toInstant(nearest.date, nearest.time) },
     });
   });
 
   app.post("/bookings", async (c) => {
     const booking = await c.req.json();
+    const { date, time } = fromInstant(booking.start);
     const length = lengths[booking.service];
-    const bookings = await bookingsFrom(booking.date);
-    if (!freeTimes(booking.date, length, hours, bookings).includes(booking.time)) {
+    const bookings = await bookingsFrom(date);
+    if (!freeTimes(date, length, hours, bookings).includes(time)) {
       return c.json({ error: "That time is no longer free." }, 409);
     }
     try {
       // The query and its values travel separately, so a name with a quote in it can't change the query.
       await db.query("INSERT INTO bookings (starts_at, ends_at, service, name, email) VALUES ($1, $2, $3, $4, $5)", [
-        booking.date + " " + booking.time,
-        booking.date + " " + addMinutes(booking.time, length),
+        date + " " + time,
+        date + " " + addMinutes(time, length),
         booking.service,
         booking.name,
         booking.email,
@@ -77,7 +80,7 @@ export function makeApp(db: pg.Pool) {
       }
       throw error;
     }
-    return c.json({ date: booking.date, time: booking.time }, 201);
+    return c.json({ start: booking.start }, 201);
   });
 
   return app;

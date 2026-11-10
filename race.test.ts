@@ -24,8 +24,7 @@ test("two bookings for the same time at the same moment: one gets in, one is ref
       method: "POST",
       headers: { "Content-Type": "application/json" },
       body: JSON.stringify({
-        date: "2026-11-10",
-        time: "10:00",
+        start: "2026-11-10T09:00:00.000Z",
         service: "first-visit",
         name,
         email: "test@example.com",
