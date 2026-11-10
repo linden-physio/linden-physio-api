@@ -5,7 +5,9 @@ import pg from "pg";
 import { and, eq, gte, lt, sql } from "drizzle-orm";
 import type { NodePgDatabase } from "drizzle-orm/node-postgres";
 import type { AnyPgColumn } from "drizzle-orm/pg-core";
+import type { z } from "zod";
 import { bookings, openingHours, services, staff } from "./schema.ts";
+import { FreeTimes, FreeTimesQuery, NewBooking } from "./schemas.ts";
 import { toInstant, fromInstant } from "./clock.ts";
 import { freeTimes, nearestFreeTime, type Booking, type OpeningHours } from "./slots.ts";
 
@@ -30,6 +32,14 @@ function postgresError(error: unknown): pg.DatabaseError | null {
   return cause instanceof pg.DatabaseError ? cause : null;
 }
 
+// A 400 answer that names each field that failed, and why.
+function problems(error: z.ZodError) {
+  return {
+    error: "The request doesn't have the right shape.",
+    problems: error.issues.map((issue) => ({ path: issue.path.join("."), message: issue.message })),
+  };
+}
+
 // The earliest of some { date, time } answers, or null if there are none.
 function earliest(answers: ({ date: string; time: string } | null)[]) {
   const found = answers.filter((a) => a !== null).sort((a, b) => (a.date + a.time).localeCompare(b.date + b.time));
@@ -48,9 +58,10 @@ export function makeApp(db: NodePgDatabase) {
     return hours;
   }
 
-  async function minutesFor(service: string): Promise<number> {
+  // How long a service takes, or null if there's no such service.
+  async function minutesFor(service: string): Promise<number | null> {
     const [row] = await db.select().from(services).where(eq(services.id, service));
-    return row.minutes;
+    return row ? row.minutes : null;
   }
 
   // Everything needed to work out a day's free times: the hours, the staff, and each one's bookings.
@@ -85,8 +96,11 @@ export function makeApp(db: NodePgDatabase) {
   app.use(cors({ origin: "http://localhost:5173" }));
 
   app.get("/free-times", async (c) => {
-    const date = c.req.query("date")!;
-    const length = await minutesFor(c.req.query("service")!);
+    const query = FreeTimesQuery.safeParse(c.req.query());
+    if (!query.success) return c.json(problems(query.error), 400);
+    const { date, service } = query.data;
+    const length = await minutesFor(service);
+    if (length === null) return c.json({ error: "No such service: " + service }, 400);
     const { hours, people } = await diary(date);
     // A time is free if any physiotherapist is free then.
     const times = [...new Set(people.flatMap((person) => freeTimes(date, length, hours, person.bookings)))].sort();
@@ -94,17 +108,21 @@ export function makeApp(db: NodePgDatabase) {
     const nearest = closed
       ? earliest(people.map((person) => nearestFreeTime(date, length, hours, person.bookings)))
       : null;
-    return c.json({
+    const answer: FreeTimes = {
       closed,
       times: times.map((time) => ({ start: toInstant(date, time) })),
       nearest: nearest && { date: nearest.date, start: toInstant(nearest.date, nearest.time) },
-    });
+    };
+    return c.json(answer);
   });
 
   app.post("/bookings", async (c) => {
-    const booking = await c.req.json();
+    const parsed = NewBooking.safeParse(await c.req.json());
+    if (!parsed.success) return c.json(problems(parsed.error), 400);
+    const booking = parsed.data;
     const { date, time } = fromInstant(booking.start);
     const length = await minutesFor(booking.service);
+    if (length === null) return c.json({ error: "No such service: " + booking.service }, 400);
     // Try the physiotherapists who are free at that time, one after another. Another request can
     // take the same physiotherapist between our check and our insert, and then the next one may
     // still be free.
