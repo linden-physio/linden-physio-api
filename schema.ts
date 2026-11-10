@@ -1,21 +1,26 @@
-import { pgTable, serial, timestamp, text, integer, time } from "drizzle-orm/pg-core";
+import { pgTable, serial, timestamp, text, integer, time, index } from "drizzle-orm/pg-core";
 
 // The clinic's tables, described in TypeScript. drizzle-kit compares this file with the migrations
 // so far and writes the SQL for what changed.
 
-export const bookings = pgTable("bookings", {
-  id: serial().primaryKey(),
-  startsAt: timestamp("starts_at", { withTimezone: true, mode: "string" }).notNull(),
-  endsAt: timestamp("ends_at", { withTimezone: true, mode: "string" }).notNull(),
-  service: text()
-    .notNull()
-    .references(() => services.id),
-  staffId: integer("staff_id")
-    .notNull()
-    .references(() => staff.id),
-  name: text().notNull(),
-  email: text().notNull(),
-});
+export const bookings = pgTable(
+  "bookings",
+  {
+    id: serial().primaryKey(),
+    startsAt: timestamp("starts_at", { withTimezone: true, mode: "string" }).notNull(),
+    endsAt: timestamp("ends_at", { withTimezone: true, mode: "string" }).notNull(),
+    service: text()
+      .notNull()
+      .references(() => services.id),
+    staffId: integer("staff_id")
+      .notNull()
+      .references(() => staff.id),
+    name: text().notNull(),
+    email: text().notNull(),
+  },
+  // The free times ask for a fortnight of bookings by start time, so look them up by start time.
+  (table) => [index("bookings_starts_at_idx").on(table.startsAt)],
+);
 
 export const staff = pgTable("staff", {
   id: serial().primaryKey(),

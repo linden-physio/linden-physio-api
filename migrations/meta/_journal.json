@@ -43,6 +43,13 @@
       "when": 1794341589488,
       "tag": "0005_one_booking_at_a_time_per_physiotherapist",
       "breakpoints": true
+    },
+    {
+      "idx": 6,
+      "version": "7",
+      "when": 1794341657478,
+      "tag": "0006_index_bookings_by_start",
+      "breakpoints": true
     }
   ]
 }
