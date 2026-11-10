@@ -2,10 +2,12 @@
 
 The server behind the booking page at lindenphysio.com. It works out the free times, takes bookings and cancels them.
 
-It needs Postgres, with two databases: one for the server and one for the tests. Their addresses go in
+It needs Postgres, with two databases: one for the server and one for the tests. compose.yaml starts
+both in Docker. Their addresses go in
 a file `.env`, which git ignores: copy `.env.example` to `.env` and fill it in. The tables are described
 in schema.ts; `npm run migrate` brings the database up to date.
 
+    docker compose up -d     # Postgres 18, as in production (compose.yaml)
     cp .env.example .env
     npm install
     npm run migrate

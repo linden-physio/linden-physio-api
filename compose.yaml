@@ -1,0 +1,19 @@
+# Postgres for this computer: the same major version as production, for everyone on the team.
+#   docker compose up -d     starts it in the background
+#   docker compose down      stops it (the data stays in the volume)
+services:
+  postgres:
+    image: postgres:18
+    environment:
+      POSTGRES_USER: linden
+      POSTGRES_PASSWORD: linden
+      POSTGRES_DB: linden
+    ports:
+      - "5432:5432"
+    volumes:
+      - postgres-data:/var/lib/postgresql
+      # Runs once, when the volume is new: makes the tests' database too.
+      - ./docker/create-test-database.sql:/docker-entrypoint-initdb.d/create-test-database.sql
+
+volumes:
+  postgres-data:
