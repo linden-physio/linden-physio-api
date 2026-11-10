@@ -28,10 +28,14 @@ function addMinutes(time: string, minutes: number): string {
 export function makeApp(db: pg.Pool) {
   // The bookings from the given day to two weeks after it.
   async function bookingsFrom(date: string): Promise<Booking[]> {
+    // The database holds instants. Ask it for the clinic's wall times.
     const result = await db.query(
-      `SELECT to_char(starts_at, 'YYYY-MM-DD') AS date, to_char(starts_at, 'HH24:MI') AS start, to_char(ends_at, 'HH24:MI') AS end
+      `SELECT to_char(starts_at AT TIME ZONE 'Europe/Stockholm', 'YYYY-MM-DD') AS date,
+              to_char(starts_at AT TIME ZONE 'Europe/Stockholm', 'HH24:MI') AS start,
+              to_char(ends_at AT TIME ZONE 'Europe/Stockholm', 'HH24:MI') AS end
        FROM bookings
-       WHERE starts_at >= $1::date AND starts_at < $1::date + 15`,
+       WHERE starts_at >= $1::date::timestamp AT TIME ZONE 'Europe/Stockholm'
+         AND starts_at < ($1::date + 15)::timestamp AT TIME ZONE 'Europe/Stockholm'`,
       [date],
     );
     return result.rows;
@@ -65,8 +69,8 @@ export function makeApp(db: pg.Pool) {
     try {
       // The query and its values travel separately, so a name with a quote in it can't change the query.
       await db.query("INSERT INTO bookings (starts_at, ends_at, service, name, email) VALUES ($1, $2, $3, $4, $5)", [
-        date + " " + time,
-        date + " " + addMinutes(time, length),
+        toInstant(date, time),
+        toInstant(date, addMinutes(time, length)),
         booking.service,
         booking.name,
         booking.email,
