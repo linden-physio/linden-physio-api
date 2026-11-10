@@ -19,7 +19,7 @@ jobs:
           - 5432:5432
         options: --health-cmd pg_isready --health-interval 2s --health-timeout 5s --health-retries 10
     env:
-      PGUSER: postgres
+      TEST_DATABASE_URL: postgres://postgres@localhost:5432/linden_test
     steps:
       - uses: actions/checkout@v7
       - uses: actions/setup-node@v7

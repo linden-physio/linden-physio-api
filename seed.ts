@@ -1,5 +1,6 @@
 import { drizzle, type NodePgDatabase } from "drizzle-orm/node-postgres";
 import { openingHours, services, staff } from "./schema.ts";
+import { setting } from "./env.ts";
 
 // The clinic as it is today: its services, its opening hours and its physiotherapists.
 // Running it again changes nothing.
@@ -31,9 +32,9 @@ export async function seed(db: NodePgDatabase) {
     .onConflictDoNothing();
 }
 
-// `node seed.ts` fills the database on this computer.
+// `npm run seed` fills the database named in DATABASE_URL.
 if (import.meta.main) {
-  const db = drizzle("postgres://localhost/linden");
+  const db = drizzle(setting("DATABASE_URL"));
   await seed(db);
   await db.$client.end();
   console.log("Seeded the clinic's services, opening hours and staff.");

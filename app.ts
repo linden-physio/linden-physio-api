@@ -46,8 +46,9 @@ function earliest(answers: ({ date: string; time: string } | null)[]) {
   return found[0] ?? null;
 }
 
-// The server, talking to the given database. now() is the time; the tests give it a fixed one.
-export function makeApp(db: NodePgDatabase, now: () => Date = () => new Date()) {
+// The server, talking to the given database, and answering the pages at the given origins. now() is
+// the time; the tests give it a fixed one.
+export function makeApp(db: NodePgDatabase, allowedOrigins: string[], now: () => Date = () => new Date()) {
   // The clinic's opening hours, by weekday (0 is Sunday). A day with no row is closed.
   async function hoursByWeekday(): Promise<Record<number, OpeningHours>> {
     const hours: Record<number, OpeningHours> = {};
@@ -93,7 +94,7 @@ export function makeApp(db: NodePgDatabase, now: () => Date = () => new Date()) 
 
   const app = new Hono();
   app.use(logger());
-  app.use(cors({ origin: "http://localhost:5173" }));
+  app.use(cors({ origin: allowedOrigins }));
 
   app.get("/free-times", async (c) => {
     const query = FreeTimesQuery.safeParse(c.req.query());

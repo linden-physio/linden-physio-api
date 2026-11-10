@@ -5,11 +5,12 @@ import { sql } from "drizzle-orm";
 import { drizzle } from "drizzle-orm/node-postgres";
 import { migrate } from "drizzle-orm/node-postgres/migrator";
 import { makeApp } from "./app.ts";
+import { setting } from "./env.ts";
 import { seed } from "./seed.ts";
 
 test("three bookings for the same time at the same moment, with two physiotherapists: two get in, one is refused", async (t) => {
   // A database of its own, emptied and built from the migrations, so the test never touches real bookings.
-  const db = drizzle("postgres://localhost/linden_test");
+  const db = drizzle(setting("TEST_DATABASE_URL"));
   await db.execute(sql`DROP SCHEMA IF EXISTS public, drizzle CASCADE`);
   await db.execute(sql`CREATE SCHEMA public`);
   await migrate(db, { migrationsFolder: "migrations" });
@@ -17,7 +18,7 @@ test("three bookings for the same time at the same moment, with two physiotherap
   // A server that has been running a while has its connections open already. Open three, so that the
   // three bookings below really do run side by side.
   await Promise.all([db.execute(sql`SELECT 1`), db.execute(sql`SELECT 1`), db.execute(sql`SELECT 1`)]);
-  const server = serve({ fetch: makeApp(db).fetch, port: 3001 });
+  const server = serve({ fetch: makeApp(db, []).fetch, port: 3001 });
   t.after(async () => {
     server.close();
     await db.$client.end();

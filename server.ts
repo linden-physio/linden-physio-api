@@ -1,8 +1,9 @@
 import { serve } from "@hono/node-server";
 import { drizzle } from "drizzle-orm/node-postgres";
 import { makeApp } from "./app.ts";
+import { setting } from "./env.ts";
 
-// The clinic's database, on this computer.
-const db = drizzle("postgres://localhost/linden");
+const db = drizzle(setting("DATABASE_URL"));
+const app = makeApp(db, setting("ALLOWED_ORIGINS").split(","));
 
-serve({ fetch: makeApp(db).fetch, port: 3000 }, () => console.log("Listening on http://localhost:3000"));
+serve({ fetch: app.fetch, port: 3000 }, () => console.log("Listening on http://localhost:3000"));

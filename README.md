@@ -2,12 +2,14 @@
 
 The server behind the booking page at lindenphysio.com. It works out the free times, takes bookings and cancels them.
 
-It needs Postgres on this computer, with two databases: `linden` for the server and `linden_test`
-for the tests. The tables are described in schema.ts; `npm run migrate` brings a database up to date.
+It needs Postgres, with two databases: one for the server and one for the tests. Their addresses go in
+a file `.env`, which git ignores: copy `.env.example` to `.env` and fill it in. The tables are described
+in schema.ts; `npm run migrate` brings the database up to date.
 
-    createdb linden && createdb linden_test
+    cp .env.example .env
     npm install
     npm run migrate
+    npm run seed
     npm start        # http://localhost:3000
     npm test
 

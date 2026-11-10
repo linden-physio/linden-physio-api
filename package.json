@@ -3,13 +3,13 @@
   "private": true,
   "type": "module",
   "scripts": {
-    "start": "node --watch server.ts",
+    "start": "node --env-file-if-exists=.env --watch server.ts",
     "typecheck": "tsc",
-    "test": "node --test --test-concurrency=1",
+    "test": "node --env-file-if-exists=.env --test --test-concurrency=1",
     "lint": "eslint .",
     "generate": "drizzle-kit generate",
-    "migrate": "node migrate.ts",
-    "seed": "node seed.ts"
+    "migrate": "node --env-file-if-exists=.env migrate.ts",
+    "seed": "node --env-file-if-exists=.env seed.ts"
   },
   "devDependencies": {
     "@eslint/js": "10.0.1",

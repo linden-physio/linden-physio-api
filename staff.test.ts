@@ -5,15 +5,16 @@ import { sql } from "drizzle-orm";
 import { drizzle } from "drizzle-orm/node-postgres";
 import { migrate } from "drizzle-orm/node-postgres/migrator";
 import { makeApp } from "./app.ts";
+import { setting } from "./env.ts";
 import { seed } from "./seed.ts";
 
 test("with two physiotherapists, two people can book Tuesday at ten, and a third can't", async (t) => {
-  const db = drizzle("postgres://localhost/linden_test");
+  const db = drizzle(setting("TEST_DATABASE_URL"));
   await db.execute(sql`DROP SCHEMA IF EXISTS public, drizzle CASCADE`);
   await db.execute(sql`CREATE SCHEMA public`);
   await migrate(db, { migrationsFolder: "migrations" });
   await seed(db);
-  const server = serve({ fetch: makeApp(db).fetch, port: 3002 });
+  const server = serve({ fetch: makeApp(db, []).fetch, port: 3002 });
   t.after(async () => {
     server.close();
     await db.$client.end();

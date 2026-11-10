@@ -4,10 +4,11 @@ import { sql } from "drizzle-orm";
 import { drizzle } from "drizzle-orm/node-postgres";
 import { migrate } from "drizzle-orm/node-postgres/migrator";
 import { makeApp } from "./app.ts";
+import { setting } from "./env.ts";
 import { seed } from "./seed.ts";
 
 test("a booking can be cancelled until it starts, and only once", async (t) => {
-  const db = drizzle("postgres://localhost/linden_test");
+  const db = drizzle(setting("TEST_DATABASE_URL"));
   await db.execute(sql`DROP SCHEMA IF EXISTS public, drizzle CASCADE`);
   await db.execute(sql`CREATE SCHEMA public`);
   await migrate(db, { migrationsFolder: "migrations" });
@@ -16,7 +17,7 @@ test("a booking can be cancelled until it starts, and only once", async (t) => {
 
   // Monday evening, then Tuesday at ten past ten.
   let time = new Date("2026-11-09T18:00:00.000Z");
-  const app = makeApp(db, () => time);
+  const app = makeApp(db, [], () => time);
   const book = (start: string) =>
     app.request("/bookings", {
       method: "POST",

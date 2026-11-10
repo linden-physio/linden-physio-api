@@ -1,1 +1,3 @@
 node_modules
+# Settings and passwords for this computer. See .env.example.
+.env
