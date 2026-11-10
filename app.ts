@@ -2,6 +2,10 @@ import { Hono } from "hono";
 import { cors } from "hono/cors";
 import { logger } from "hono/logger";
 import pg from "pg";
+import { and, gte, lt, sql } from "drizzle-orm";
+import type { NodePgDatabase } from "drizzle-orm/node-postgres";
+import type { AnyPgColumn } from "drizzle-orm/pg-core";
+import { bookings } from "./schema.ts";
 import { toInstant, fromInstant } from "./clock.ts";
 import { freeTimes, nearestFreeTime, type Booking, type OpeningHours } from "./slots.ts";
 
@@ -24,21 +28,39 @@ function addMinutes(time: string, minutes: number): string {
   return String(Math.floor(total / 60)).padStart(2, "0") + ":" + String(total % 60).padStart(2, "0");
 }
 
+function addDays(date: string, days: number): string {
+  const d = new Date(date + "T12:00Z");
+  d.setUTCDate(d.getUTCDate() + days);
+  return d.toISOString().slice(0, 10);
+}
+
+// The clinic's wall clock, as Postgres writes it.
+const wall = (column: AnyPgColumn, format: string) =>
+  sql<string>`to_char(${column} AT TIME ZONE 'Europe/Stockholm', ${format})`;
+
+// Postgres's own error, under the one drizzle wraps it in.
+function postgresError(error: unknown): pg.DatabaseError | null {
+  const cause = error instanceof Error ? error.cause : null;
+  return cause instanceof pg.DatabaseError ? cause : null;
+}
+
 // The server, talking to the given database.
-export function makeApp(db: pg.Pool) {
-  // The bookings from the given day to two weeks after it.
+export function makeApp(db: NodePgDatabase) {
+  // The bookings from the given day to two weeks after it, in the clinic's wall time.
   async function bookingsFrom(date: string): Promise<Booking[]> {
-    // The database holds instants. Ask it for the clinic's wall times.
-    const result = await db.query(
-      `SELECT to_char(starts_at AT TIME ZONE 'Europe/Stockholm', 'YYYY-MM-DD') AS date,
-              to_char(starts_at AT TIME ZONE 'Europe/Stockholm', 'HH24:MI') AS start,
-              to_char(ends_at AT TIME ZONE 'Europe/Stockholm', 'HH24:MI') AS end
-       FROM bookings
-       WHERE starts_at >= $1::date::timestamp AT TIME ZONE 'Europe/Stockholm'
-         AND starts_at < ($1::date + 15)::timestamp AT TIME ZONE 'Europe/Stockholm'`,
-      [date],
-    );
-    return result.rows;
+    return db
+      .select({
+        date: wall(bookings.startsAt, "YYYY-MM-DD"),
+        start: wall(bookings.startsAt, "HH24:MI"),
+        end: wall(bookings.endsAt, "HH24:MI"),
+      })
+      .from(bookings)
+      .where(
+        and(
+          gte(bookings.startsAt, toInstant(date, "00:00")),
+          lt(bookings.startsAt, toInstant(addDays(date, 15), "00:00")),
+        ),
+      );
   }
 
   const app = new Hono();
@@ -62,24 +84,23 @@ export function makeApp(db: pg.Pool) {
     const booking = await c.req.json();
     const { date, time } = fromInstant(booking.start);
     const length = lengths[booking.service];
-    const bookings = await bookingsFrom(date);
-    if (!freeTimes(date, length, hours, bookings).includes(time)) {
+    if (!freeTimes(date, length, hours, await bookingsFrom(date)).includes(time)) {
       return c.json({ error: "That time is no longer free." }, 409);
     }
     try {
-      // The query and its values travel separately, so a name with a quote in it can't change the query.
-      await db.query("INSERT INTO bookings (starts_at, ends_at, service, name, email) VALUES ($1, $2, $3, $4, $5)", [
-        toInstant(date, time),
-        toInstant(date, addMinutes(time, length)),
-        booking.service,
-        booking.name,
-        booking.email,
-      ]);
+      await db.insert(bookings).values({
+        startsAt: toInstant(date, time),
+        endsAt: toInstant(date, addMinutes(time, length)),
+        service: booking.service,
+        name: booking.name,
+        email: booking.email,
+      });
     } catch (error) {
       // Two requests can both pass the check above. The table's rule lets only one of them in:
       // the other gets 23P01 (exclusion constraint), or now and then 40P01, when both inserts were
       // waiting for each other and Postgres stopped one of them.
-      if (error instanceof pg.DatabaseError && (error.code === "23P01" || error.code === "40P01")) {
+      const code = postgresError(error)?.code;
+      if (code === "23P01" || code === "40P01") {
         return c.json({ error: "That time is no longer free." }, 409);
       }
       throw error;

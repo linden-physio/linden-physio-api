@@ -7,6 +7,9 @@
     "allowImportingTsExtensions": true,
     "erasableSyntaxOnly": true,
     "verbatimModuleSyntax": true,
-    "types": ["node"]
+    "types": ["node"],
+    // drizzle-orm's own type files don't all check under TypeScript 7 (they mention mysql2 and gel,
+    // which we don't use). Check our code, not theirs.
+    "skipLibCheck": true
   }
 }

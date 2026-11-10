@@ -1,22 +1,24 @@
 import { test } from "node:test";
 import assert from "node:assert/strict";
-import { readFile } from "node:fs/promises";
 import { serve } from "@hono/node-server";
-import pg from "pg";
+import { sql } from "drizzle-orm";
+import { drizzle } from "drizzle-orm/node-postgres";
+import { migrate } from "drizzle-orm/node-postgres/migrator";
 import { makeApp } from "./app.ts";
 
 test("two bookings for the same time at the same moment: one gets in, one is refused", async (t) => {
-  // A database of its own, emptied and made from schema.sql, so the test never touches real bookings.
-  const db = new pg.Pool({ connectionString: "postgres://localhost/linden_test" });
-  await db.query("DROP TABLE IF EXISTS bookings");
-  await db.query(await readFile(new URL("schema.sql", import.meta.url), "utf8"));
+  // A database of its own, emptied and built from the migrations, so the test never touches real bookings.
+  const db = drizzle("postgres://localhost/linden_test");
+  await db.execute(sql`DROP SCHEMA IF EXISTS public, drizzle CASCADE`);
+  await db.execute(sql`CREATE SCHEMA public`);
+  await migrate(db, { migrationsFolder: "migrations" });
   // A server that has been running a while has its connections open already. Open two, so that the
   // two bookings below really do run side by side.
-  await Promise.all([db.query("SELECT 1"), db.query("SELECT 1")]);
+  await Promise.all([db.execute(sql`SELECT 1`), db.execute(sql`SELECT 1`)]);
   const server = serve({ fetch: makeApp(db).fetch, port: 3001 });
   t.after(async () => {
     server.close();
-    await db.end();
+    await db.$client.end();
   });
 
   const book = (name: string) =>
@@ -33,6 +35,6 @@ test("two bookings for the same time at the same moment: one gets in, one is ref
   const answers = await Promise.all([book("Maja Lund"), book("Anna Holm")]);
 
   assert.deepEqual(answers.map((a) => a.status).sort(), [201, 409]);
-  const rows = await db.query("SELECT name FROM bookings");
+  const rows = await db.execute(sql`SELECT name FROM bookings`);
   assert.equal(rows.rowCount, 1);
 });
