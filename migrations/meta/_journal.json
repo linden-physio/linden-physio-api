@@ -8,6 +8,13 @@
       "when": 1794341362721,
       "tag": "0000_wild_domino",
       "breakpoints": true
+    },
+    {
+      "idx": 1,
+      "version": "7",
+      "when": 1794341460540,
+      "tag": "0001_zippy_living_mummy",
+      "breakpoints": true
     }
   ]
 }

@@ -8,7 +8,8 @@
     "test": "node --test",
     "lint": "eslint .",
     "generate": "drizzle-kit generate",
-    "migrate": "node migrate.ts"
+    "migrate": "node migrate.ts",
+    "seed": "node seed.ts"
   },
   "devDependencies": {
     "@eslint/js": "10.0.1",
