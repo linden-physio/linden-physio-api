@@ -4,6 +4,7 @@
   "type": "module",
   "scripts": {
     "start": "node --env-file-if-exists=.env --watch server.ts",
+    "build": "node migrate.ts",
     "typecheck": "tsc",
     "test": "node --env-file-if-exists=.env --test --test-concurrency=1",
     "lint": "eslint .",
@@ -28,5 +29,8 @@
     "hono": "4.13.17",
     "pg": "8.23.1",
     "zod": "4.6.7"
+  },
+  "engines": {
+    "node": ">=22.18"
   }
 }

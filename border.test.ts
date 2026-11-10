@@ -1,7 +1,7 @@
 import { test } from "node:test";
 import assert from "node:assert/strict";
 import { drizzle } from "drizzle-orm/node-postgres";
-import { makeApp } from "./app.ts";
+import { makeApp } from "./routes.ts";
 import { setting } from "./env.ts";
 
 test("a booking with no name and a start of 'soon' is refused before it reaches the database", async (t) => {

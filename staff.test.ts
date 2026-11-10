@@ -4,7 +4,7 @@ import { serve } from "@hono/node-server";
 import { sql } from "drizzle-orm";
 import { drizzle } from "drizzle-orm/node-postgres";
 import { migrate } from "drizzle-orm/node-postgres/migrator";
-import { makeApp } from "./app.ts";
+import { makeApp } from "./routes.ts";
 import { setting } from "./env.ts";
 import { seed } from "./seed.ts";
 
