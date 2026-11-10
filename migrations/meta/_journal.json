@@ -19,8 +19,22 @@
     {
       "idx": 2,
       "version": "7",
-      "when": 1794341483232,
-      "tag": "0002_vengeful_the_order",
+      "when": 1794341563924,
+      "tag": "0002_add_staff_to_bookings",
+      "breakpoints": true
+    },
+    {
+      "idx": 3,
+      "version": "7",
+      "when": 1794341564647,
+      "tag": "0003_fill_staff_on_old_bookings",
+      "breakpoints": true
+    },
+    {
+      "idx": 4,
+      "version": "7",
+      "when": 1794341572955,
+      "tag": "0004_require_staff_on_bookings",
       "breakpoints": true
     }
   ]

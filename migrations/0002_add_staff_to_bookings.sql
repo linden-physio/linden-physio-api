@@ -1,3 +1,3 @@
-ALTER TABLE "bookings" ADD COLUMN "staff_id" integer NOT NULL;--> statement-breakpoint
+ALTER TABLE "bookings" ADD COLUMN "staff_id" integer;--> statement-breakpoint
 ALTER TABLE "bookings" ADD CONSTRAINT "bookings_service_services_id_fk" FOREIGN KEY ("service") REFERENCES "public"."services"("id") ON DELETE no action ON UPDATE no action;--> statement-breakpoint
 ALTER TABLE "bookings" ADD CONSTRAINT "bookings_staff_id_staff_id_fk" FOREIGN KEY ("staff_id") REFERENCES "public"."staff"("id") ON DELETE no action ON UPDATE no action;

@@ -1,5 +1,5 @@
 {
-  "id": "a2e548e0-76b0-4645-96da-f2d2abac1f59",
+  "id": "16c97bdd-8486-438d-b408-fc93b464009f",
   "prevId": "d89308bc-9fe6-4636-b349-054cf3aff98e",
   "version": "7",
   "dialect": "postgresql",
@@ -36,7 +36,7 @@
           "name": "staff_id",
           "type": "integer",
           "primaryKey": false,
-          "notNull": true
+          "notNull": false
         },
         "name": {
           "name": "name",
