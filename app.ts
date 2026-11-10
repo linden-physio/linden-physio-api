@@ -2,26 +2,12 @@ import { Hono } from "hono";
 import { cors } from "hono/cors";
 import { logger } from "hono/logger";
 import pg from "pg";
-import { and, gte, lt, sql } from "drizzle-orm";
+import { and, eq, gte, lt, sql } from "drizzle-orm";
 import type { NodePgDatabase } from "drizzle-orm/node-postgres";
 import type { AnyPgColumn } from "drizzle-orm/pg-core";
-import { bookings } from "./schema.ts";
+import { bookings, openingHours, services, staff } from "./schema.ts";
 import { toInstant, fromInstant } from "./clock.ts";
 import { freeTimes, nearestFreeTime, type Booking, type OpeningHours } from "./slots.ts";
-
-// The clinic's opening hours, by weekday (0 is Sunday).
-const hours: Record<number, OpeningHours> = {
-  0: "closed",
-  1: { open: "09:00", close: "12:00" },
-  2: { open: "09:00", close: "12:00" },
-  3: { open: "09:00", close: "12:00" },
-  4: { open: "13:00", close: "17:00" },
-  5: { open: "09:00", close: "12:00" },
-  6: "closed",
-};
-
-// How long each service takes, in minutes.
-const lengths: Record<string, number> = { "first-visit": 60, "follow-up": 30, "sports-massage": 45 };
 
 function addMinutes(time: string, minutes: number): string {
   const total = Number(time.slice(0, 2)) * 60 + Number(time.slice(3)) + minutes;
@@ -44,12 +30,43 @@ function postgresError(error: unknown): pg.DatabaseError | null {
   return cause instanceof pg.DatabaseError ? cause : null;
 }
 
+// The earliest of some { date, time } answers, or null if there are none.
+function earliest(answers: ({ date: string; time: string } | null)[]) {
+  const found = answers.filter((a) => a !== null).sort((a, b) => (a.date + a.time).localeCompare(b.date + b.time));
+  return found[0] ?? null;
+}
+
 // The server, talking to the given database.
 export function makeApp(db: NodePgDatabase) {
+  // The clinic's opening hours, by weekday (0 is Sunday). A day with no row is closed.
+  async function hoursByWeekday(): Promise<Record<number, OpeningHours>> {
+    const hours: Record<number, OpeningHours> = {};
+    for (let weekday = 0; weekday < 7; weekday++) hours[weekday] = "closed";
+    for (const row of await db.select().from(openingHours)) {
+      hours[row.weekday] = { open: row.opens.slice(0, 5), close: row.closes.slice(0, 5) };
+    }
+    return hours;
+  }
+
+  async function minutesFor(service: string): Promise<number> {
+    const [row] = await db.select().from(services).where(eq(services.id, service));
+    return row.minutes;
+  }
+
+  // Everything needed to work out a day's free times: the hours, the staff, and each one's bookings.
+  async function diary(date: string) {
+    const [hours, people, booked] = await Promise.all([hoursByWeekday(), db.select().from(staff), bookingsFrom(date)]);
+    return {
+      hours,
+      people: people.map((person) => ({ ...person, bookings: booked.filter((b) => b.staffId === person.id) })),
+    };
+  }
+
   // The bookings from the given day to two weeks after it, in the clinic's wall time.
-  async function bookingsFrom(date: string): Promise<Booking[]> {
+  async function bookingsFrom(date: string): Promise<(Booking & { staffId: number })[]> {
     return db
       .select({
+        staffId: bookings.staffId,
         date: wall(bookings.startsAt, "YYYY-MM-DD"),
         start: wall(bookings.startsAt, "HH24:MI"),
         end: wall(bookings.endsAt, "HH24:MI"),
@@ -69,13 +86,17 @@ export function makeApp(db: NodePgDatabase) {
 
   app.get("/free-times", async (c) => {
     const date = c.req.query("date")!;
-    const bookings = await bookingsFrom(date);
-    const length = lengths[c.req.query("service")!];
+    const length = await minutesFor(c.req.query("service")!);
+    const { hours, people } = await diary(date);
+    // A time is free if any physiotherapist is free then.
+    const times = [...new Set(people.flatMap((person) => freeTimes(date, length, hours, person.bookings)))].sort();
     const closed = hours[new Date(date + "T12:00").getDay()] === "closed";
-    const nearest = closed ? nearestFreeTime(date, length, hours, bookings) : null;
+    const nearest = closed
+      ? earliest(people.map((person) => nearestFreeTime(date, length, hours, person.bookings)))
+      : null;
     return c.json({
       closed,
-      times: freeTimes(date, length, hours, bookings).map((time) => ({ start: toInstant(date, time) })),
+      times: times.map((time) => ({ start: toInstant(date, time) })),
       nearest: nearest && { date: nearest.date, start: toInstant(nearest.date, nearest.time) },
     });
   });
@@ -83,8 +104,11 @@ export function makeApp(db: NodePgDatabase) {
   app.post("/bookings", async (c) => {
     const booking = await c.req.json();
     const { date, time } = fromInstant(booking.start);
-    const length = lengths[booking.service];
-    if (!freeTimes(date, length, hours, await bookingsFrom(date)).includes(time)) {
+    const length = await minutesFor(booking.service);
+    const { hours, people } = await diary(date);
+    // The first physiotherapist who is free at that time.
+    const person = people.find((person) => freeTimes(date, length, hours, person.bookings).includes(time));
+    if (!person) {
       return c.json({ error: "That time is no longer free." }, 409);
     }
     try {
@@ -92,6 +116,7 @@ export function makeApp(db: NodePgDatabase) {
         startsAt: toInstant(date, time),
         endsAt: toInstant(date, addMinutes(time, length)),
         service: booking.service,
+        staffId: person.id,
         name: booking.name,
         email: booking.email,
       });

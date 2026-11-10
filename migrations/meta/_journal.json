@@ -15,6 +15,13 @@
       "when": 1794341460540,
       "tag": "0001_zippy_living_mummy",
       "breakpoints": true
+    },
+    {
+      "idx": 2,
+      "version": "7",
+      "when": 1794341483232,
+      "tag": "0002_vengeful_the_order",
+      "breakpoints": true
     }
   ]
 }

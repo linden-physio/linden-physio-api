@@ -7,7 +7,12 @@ export const bookings = pgTable("bookings", {
   id: serial().primaryKey(),
   startsAt: timestamp("starts_at", { withTimezone: true, mode: "string" }).notNull(),
   endsAt: timestamp("ends_at", { withTimezone: true, mode: "string" }).notNull(),
-  service: text().notNull(),
+  service: text()
+    .notNull()
+    .references(() => services.id),
+  staffId: integer("staff_id")
+    .notNull()
+    .references(() => staff.id),
   name: text().notNull(),
   email: text().notNull(),
 });
