@@ -105,32 +105,30 @@ export function makeApp(db: NodePgDatabase) {
     const booking = await c.req.json();
     const { date, time } = fromInstant(booking.start);
     const length = await minutesFor(booking.service);
+    // Try the physiotherapists who are free at that time, one after another. Another request can
+    // take the same physiotherapist between our check and our insert, and then the next one may
+    // still be free.
     const { hours, people } = await diary(date);
-    // The first physiotherapist who is free at that time.
-    const person = people.find((person) => freeTimes(date, length, hours, person.bookings).includes(time));
-    if (!person) {
-      return c.json({ error: "That time is no longer free." }, 409);
-    }
-    try {
-      await db.insert(bookings).values({
-        startsAt: toInstant(date, time),
-        endsAt: toInstant(date, addMinutes(time, length)),
-        service: booking.service,
-        staffId: person.id,
-        name: booking.name,
-        email: booking.email,
-      });
-    } catch (error) {
-      // Two requests can both pass the check above. The table's rule lets only one of them in:
-      // the other gets 23P01 (exclusion constraint), or now and then 40P01, when both inserts were
-      // waiting for each other and Postgres stopped one of them.
-      const code = postgresError(error)?.code;
-      if (code === "23P01" || code === "40P01") {
-        return c.json({ error: "That time is no longer free." }, 409);
+    const free = people.filter((person) => freeTimes(date, length, hours, person.bookings).includes(time));
+    for (const person of free) {
+      try {
+        await db.insert(bookings).values({
+          startsAt: toInstant(date, time),
+          endsAt: toInstant(date, addMinutes(time, length)),
+          service: booking.service,
+          staffId: person.id,
+          name: booking.name,
+          email: booking.email,
+        });
+        return c.json({ start: booking.start }, 201);
+      } catch (error) {
+        // The table's rule refused it: 23P01 (exclusion constraint), or now and then 40P01, when two
+        // inserts were waiting for each other and Postgres stopped one of them.
+        const code = postgresError(error)?.code;
+        if (code !== "23P01" && code !== "40P01") throw error;
       }
-      throw error;
     }
-    return c.json({ start: booking.start }, 201);
+    return c.json({ error: "That time is no longer free." }, 409);
   });
 
   return app;

@@ -7,16 +7,16 @@ import { migrate } from "drizzle-orm/node-postgres/migrator";
 import { makeApp } from "./app.ts";
 import { seed } from "./seed.ts";
 
-test("two bookings for the same time at the same moment: one gets in, one is refused", async (t) => {
+test("three bookings for the same time at the same moment, with two physiotherapists: two get in, one is refused", async (t) => {
   // A database of its own, emptied and built from the migrations, so the test never touches real bookings.
   const db = drizzle("postgres://localhost/linden_test");
   await db.execute(sql`DROP SCHEMA IF EXISTS public, drizzle CASCADE`);
   await db.execute(sql`CREATE SCHEMA public`);
   await migrate(db, { migrationsFolder: "migrations" });
   await seed(db);
-  // A server that has been running a while has its connections open already. Open two, so that the
-  // two bookings below really do run side by side.
-  await Promise.all([db.execute(sql`SELECT 1`), db.execute(sql`SELECT 1`)]);
+  // A server that has been running a while has its connections open already. Open three, so that the
+  // three bookings below really do run side by side.
+  await Promise.all([db.execute(sql`SELECT 1`), db.execute(sql`SELECT 1`), db.execute(sql`SELECT 1`)]);
   const server = serve({ fetch: makeApp(db).fetch, port: 3001 });
   t.after(async () => {
     server.close();
@@ -34,9 +34,9 @@ test("two bookings for the same time at the same moment: one gets in, one is ref
         email: "test@example.com",
       }),
     });
-  const answers = await Promise.all([book("Maja Lund"), book("Anna Holm")]);
+  const answers = await Promise.all([book("Maja Lund"), book("Anna Holm"), book("Leo Strand")]);
 
-  assert.deepEqual(answers.map((a) => a.status).sort(), [201, 409]);
+  assert.deepEqual(answers.map((a) => a.status).sort(), [201, 201, 409]);
   const rows = await db.execute(sql`SELECT name FROM bookings`);
-  assert.equal(rows.rowCount, 1);
+  assert.equal(rows.rowCount, 2);
 });

@@ -36,6 +36,13 @@
       "when": 1794341572955,
       "tag": "0004_require_staff_on_bookings",
       "breakpoints": true
+    },
+    {
+      "idx": 5,
+      "version": "7",
+      "when": 1794341589488,
+      "tag": "0005_one_booking_at_a_time_per_physiotherapist",
+      "breakpoints": true
     }
   ]
 }
