@@ -1,4 +1,4 @@
-import { createServer } from "node:http";
+import { createServer, type IncomingMessage } from "node:http";
 import { freeTimes, nearestFreeTime, type Booking, type OpeningHours } from "./slots.ts";
 
 // The clinic's opening hours, by weekday (0 is Sunday).
@@ -22,9 +22,17 @@ const bookings: Booking[] = [
   { date: "2026-11-11", start: "11:00", end: "12:00" },
 ];
 
-const server = createServer((request, response) => {
+// Read the whole body of a request as text.
+async function readBody(request: IncomingMessage): Promise<string> {
+  let body = "";
+  for await (const chunk of request) body += chunk;
+  return body;
+}
+
+const server = createServer(async (request, response) => {
   const url = new URL(request.url!, "http://localhost");
-  console.log(request.method, url.pathname + url.search);
+  // When the answer has gone, print the request and its status, like "POST /bookings 201".
+  response.on("finish", () => console.log(request.method, url.pathname + url.search, response.statusCode));
 
   // The page on localhost:5173 may read our answers.
   response.setHeader("Access-Control-Allow-Origin", "http://localhost:5173");
@@ -40,6 +48,33 @@ const server = createServer((request, response) => {
     };
     response.writeHead(200, { "Content-Type": "application/json" });
     response.end(JSON.stringify(answer));
+    return;
+  }
+
+  // Before a POST with JSON, the browser asks first whether it may send one.
+  if (request.method === "OPTIONS") {
+    response.writeHead(204, {
+      "Access-Control-Allow-Methods": "GET, POST",
+      "Access-Control-Allow-Headers": "Content-Type",
+    });
+    response.end();
+    return;
+  }
+
+  if (request.method === "POST" && url.pathname === "/bookings") {
+    const booking = JSON.parse(await readBody(request));
+    const length = lengths[booking.service];
+    if (!freeTimes(booking.date, length, hours, bookings).includes(booking.time)) {
+      response.writeHead(409, { "Content-Type": "application/json" });
+      response.end(JSON.stringify({ error: "That time is no longer free." }));
+      return;
+    }
+    const start = Number(booking.time.slice(0, 2)) * 60 + Number(booking.time.slice(3));
+    const end = start + length;
+    const endTime = String(Math.floor(end / 60)).padStart(2, "0") + ":" + String(end % 60).padStart(2, "0");
+    bookings.push({ date: booking.date, start: booking.time, end: endTime });
+    response.writeHead(201, { "Content-Type": "application/json" });
+    response.end(JSON.stringify({ date: booking.date, time: booking.time }));
     return;
   }
 
