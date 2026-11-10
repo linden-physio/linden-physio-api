@@ -23,8 +23,8 @@ const lengths: Record<string, number> = { "first-visit": 60, "follow-up": 30, "s
 const db = new pg.Pool({ connectionString: "postgres://localhost/linden" });
 
 // The bookings from the given day to two weeks after it.
-async function bookingsFrom(date: string): Promise<Booking[]> {
-  const result = await db.query(
+async function bookingsFrom(date: string, client: pg.Pool | pg.PoolClient = db): Promise<Booking[]> {
+  const result = await client.query(
     `SELECT to_char(starts_at, 'YYYY-MM-DD') AS date, to_char(starts_at, 'HH24:MI') AS start, to_char(ends_at, 'HH24:MI') AS end
      FROM bookings
      WHERE starts_at >= $1::date AND starts_at < $1::date + 15`,
@@ -57,21 +57,30 @@ app.get("/free-times", async (c) => {
 app.post("/bookings", async (c) => {
   const booking = await c.req.json();
   const length = lengths[booking.service];
-  const bookings = await bookingsFrom(booking.date);
-  if (!freeTimes(booking.date, length, hours, bookings).includes(booking.time)) {
-    return c.json({ error: "That time is no longer free." }, 409);
+  // Check and insert in one transaction: both happen, or neither does.
+  const client = await db.connect();
+  try {
+    await client.query("BEGIN");
+    const bookings = await bookingsFrom(booking.date, client);
+    if (!freeTimes(booking.date, length, hours, bookings).includes(booking.time)) {
+      await client.query("ROLLBACK");
+      return c.json({ error: "That time is no longer free." }, 409);
+    }
+    // The query and its values travel separately, so a name with a quote in it can't change the query.
+    await client.query(
+      "INSERT INTO bookings (starts_at, ends_at, service, name, email) VALUES ($1, $2, $3, $4, $5)",
+      [
+        booking.date + " " + booking.time,
+        booking.date + " " + addMinutes(booking.time, length),
+        booking.service,
+        booking.name,
+        booking.email,
+      ],
+    );
+    await client.query("COMMIT");
+  } finally {
+    client.release();
   }
-  // The query and its values travel separately, so a name with a quote in it can't change the query.
-  await db.query(
-    "INSERT INTO bookings (starts_at, ends_at, service, name, email) VALUES ($1, $2, $3, $4, $5)",
-    [
-      booking.date + " " + booking.time,
-      booking.date + " " + addMinutes(booking.time, length),
-      booking.service,
-      booking.name,
-      booking.email,
-    ],
-  );
   return c.json({ date: booking.date, time: booking.time }, 201);
 });
 
