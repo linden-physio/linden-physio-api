@@ -8,3 +8,6 @@ CREATE TABLE bookings (
   name text NOT NULL,
   email text NOT NULL
 );
+
+-- No two bookings may overlap. Added in film 23, after two bookings for the same time both got in.
+ALTER TABLE bookings ADD CONSTRAINT no_overlap EXCLUDE USING gist (tsrange(starts_at, ends_at) WITH &&);
