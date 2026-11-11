@@ -16,6 +16,9 @@ export const NewBooking = z.object({
 });
 export type NewBooking = z.infer<typeof NewBooking>;
 
+// The id in DELETE /bookings/{id}: the long random one each booking is given.
+export const BookingId = z.uuid();
+
 export const FreeTimes = z.object({
   closed: z.boolean(),
   times: z.array(z.object({ startsAt: z.iso.datetime() })),

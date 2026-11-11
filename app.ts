@@ -2,12 +2,12 @@ import { Hono } from "hono";
 import { cors } from "hono/cors";
 import { logger } from "hono/logger";
 import pg from "pg";
-import { and, eq, gte, lt, sql } from "drizzle-orm";
+import { and, eq, gt, gte, lt, sql } from "drizzle-orm";
 import type { NodePgDatabase } from "drizzle-orm/node-postgres";
 import type { AnyPgColumn } from "drizzle-orm/pg-core";
 import type { z } from "zod";
 import { bookings, openingHours, services, staff } from "./schema.ts";
-import { FreeTimes, FreeTimesQuery, NewBooking } from "./schemas.ts";
+import { BookingId, FreeTimes, FreeTimesQuery, NewBooking } from "./schemas.ts";
 import { toInstant, fromInstant } from "./clock.ts";
 import { freeTimes, nearestFreeTime, type Booking, type OpeningHours } from "./slots.ts";
 
@@ -46,8 +46,8 @@ function earliest(answers: ({ date: string; time: string } | null)[]) {
   return found[0] ?? null;
 }
 
-// The server, talking to the given database.
-export function makeApp(db: NodePgDatabase) {
+// The server, talking to the given database. now() is the time; the tests give it a fixed one.
+export function makeApp(db: NodePgDatabase, now: () => Date = () => new Date()) {
   // The clinic's opening hours, by weekday (0 is Sunday). A day with no row is closed.
   async function hoursByWeekday(): Promise<Record<number, OpeningHours>> {
     const hours: Record<number, OpeningHours> = {};
@@ -151,6 +151,21 @@ export function makeApp(db: NodePgDatabase) {
       }
     }
     return c.json({ error: "That time is no longer free." }, 409);
+  });
+
+  app.delete("/bookings/:id", async (c) => {
+    const id = BookingId.safeParse(c.req.param("id"));
+    if (!id.success) return c.json(problems(id.error), 400);
+    // Delete it only if it hasn't started, in one statement, so that nothing can change in between.
+    const deleted = await db
+      .delete(bookings)
+      .where(and(eq(bookings.publicId, id.data), gt(bookings.startsAt, now().toISOString())))
+      .returning({ id: bookings.id });
+    if (deleted.length > 0) return c.body(null, 204);
+    // Nothing deleted: either there's no such booking, or it has already started.
+    const [left] = await db.select({ id: bookings.id }).from(bookings).where(eq(bookings.publicId, id.data));
+    if (left) return c.json({ error: "This booking has already started." }, 409);
+    return c.json({ error: "There is no such booking." }, 404);
   });
 
   return app;
