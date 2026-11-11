@@ -1,4 +1,4 @@
-import { pgTable, serial, timestamp, text, integer, time, index } from "drizzle-orm/pg-core";
+import { pgTable, serial, timestamp, text, integer, time, index, uuid } from "drizzle-orm/pg-core";
 
 // The clinic's tables, described in TypeScript. drizzle-kit compares this file with the migrations
 // so far and writes the SQL for what changed.
@@ -7,6 +7,9 @@ export const bookings = pgTable(
   "bookings",
   {
     id: serial().primaryKey(),
+    // The id we give to the person who booked, to cancel with. Counting ids (1, 2, 3) are easy to guess,
+    // so this one is long and random, and the counting one stays inside the database.
+    publicId: uuid("public_id").notNull().defaultRandom().unique(),
     startsAt: timestamp("starts_at", { withTimezone: true, mode: "string" }).notNull(),
     endsAt: timestamp("ends_at", { withTimezone: true, mode: "string" }).notNull(),
     service: text()

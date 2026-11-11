@@ -50,6 +50,13 @@
       "when": 1794341657478,
       "tag": "0006_index_bookings_by_start",
       "breakpoints": true
+    },
+    {
+      "idx": 7,
+      "version": "7",
+      "when": 1794433564578,
+      "tag": "0007_give_each_booking_a_public_id",
+      "breakpoints": true
     }
   ]
 }

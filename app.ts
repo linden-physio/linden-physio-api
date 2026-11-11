@@ -130,15 +130,19 @@ export function makeApp(db: NodePgDatabase) {
     const free = people.filter((person) => freeTimes(date, length, hours, person.bookings).includes(time));
     for (const person of free) {
       try {
-        await db.insert(bookings).values({
-          startsAt: toInstant(date, time),
-          endsAt: toInstant(date, addMinutes(time, length)),
-          service: booking.service,
-          staffId: person.id,
-          name: booking.name,
-          email: booking.email,
-        });
-        return c.json({ start: booking.start }, 201);
+        const [made] = await db
+          .insert(bookings)
+          .values({
+            startsAt: toInstant(date, time),
+            endsAt: toInstant(date, addMinutes(time, length)),
+            service: booking.service,
+            staffId: person.id,
+            name: booking.name,
+            email: booking.email,
+          })
+          .returning({ id: bookings.publicId });
+        // The id is what the person who booked cancels with.
+        return c.json({ id: made.id, startsAt: toInstant(date, time) }, 201);
       } catch (error) {
         // The table's rule refused it: 23P01 (exclusion constraint), or now and then 40P01, when two
         // inserts were waiting for each other and Postgres stopped one of them.
