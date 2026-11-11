@@ -1,0 +1,140 @@
+openapi: 3.1.0
+info:
+  title: Linden Physio API
+  version: 1.1.0
+  description: >
+    What the booking page and the server agree on. The server answers as this file says, and the page
+    generates its types from it. A change to the API starts as a change to this file, in a pull request
+    both sides review.
+# Nobody signs in: anyone may ask for free times and book.
+security: []
+servers:
+  - url: http://localhost:3000
+paths:
+  /free-times:
+    get:
+      operationId: getFreeTimes
+      summary: The free times on one day, for one service
+      parameters:
+        - { name: date, in: query, required: true, schema: { type: string, format: date }, example: "2026-11-10" }
+        - { name: service, in: query, required: true, schema: { type: string }, example: first-visit }
+      responses:
+        "200":
+          description: The day's free times. On a closed day, the nearest free time after it.
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/FreeTimes" }
+        "400":
+          $ref: "#/components/responses/BadRequest"
+  /bookings:
+    post:
+      operationId: createBooking
+      summary: Book a time
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: { $ref: "#/components/schemas/NewBooking" }
+      responses:
+        "201":
+          description: Booked. The id is what the person who booked uses to cancel.
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/Booking" }
+              example: { id: 3f2b8c1e-6a4d-4e9b-9c7a-1d2e3f4a5b6c, startsAt: "2026-11-10T09:00:00.000Z" }
+        "400":
+          $ref: "#/components/responses/BadRequest"
+        "409":
+          description: Someone else booked that time first.
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/Problem" }
+              example: { error: That time is no longer free. }
+  /bookings/{id}:
+    delete:
+      operationId: cancelBooking
+      summary: Cancel a booking
+      description: >
+        Anyone who knows a booking's id can cancel it, so the id is long and random, and only the person
+        who booked is given it.
+      parameters:
+        - name: id
+          in: path
+          required: true
+          schema: { type: string, format: uuid }
+          example: 3f2b8c1e-6a4d-4e9b-9c7a-1d2e3f4a5b6c
+      responses:
+        "204":
+          description: Cancelled. The time is free again.
+        "400":
+          $ref: "#/components/responses/BadRequest"
+        "404":
+          description: There is no booking with that id. It may have been cancelled already.
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/Problem" }
+              example: { error: There is no such booking. }
+        "409":
+          description: The booking has already started, so it can't be cancelled.
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/Problem" }
+              example: { error: This booking has already started. }
+components:
+  responses:
+    BadRequest:
+      description: The request doesn't have the right shape.
+      content:
+        application/json:
+          schema: { $ref: "#/components/schemas/Problem" }
+  schemas:
+    FreeTimes:
+      type: object
+      required: [closed, times, nearest]
+      additionalProperties: false
+      properties:
+        closed: { type: boolean }
+        times:
+          type: array
+          items:
+            type: object
+            required: [startsAt]
+            additionalProperties: false
+            properties:
+              startsAt: { type: string, format: date-time }
+        nearest:
+          oneOf:
+            - type: "null"
+            - type: object
+              required: [date, startsAt]
+              additionalProperties: false
+              properties:
+                date: { type: string, format: date }
+                startsAt: { type: string, format: date-time }
+    NewBooking:
+      type: object
+      required: [start, service, name, email]
+      properties:
+        start: { type: string, format: date-time }
+        service: { type: string }
+        name: { type: string }
+        email: { type: string, format: email }
+    Booking:
+      type: object
+      required: [id, startsAt]
+      properties:
+        id: { type: string, format: uuid }
+        startsAt: { type: string, format: date-time }
+    Problem:
+      type: object
+      required: [error]
+      properties:
+        error: { type: string }
+        problems:
+          type: array
+          items:
+            type: object
+            required: [path, message]
+            properties:
+              path: { type: string }
+              message: { type: string }
