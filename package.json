@@ -2,6 +2,7 @@
   "name": "linden-physio-api",
   "private": true,
   "type": "module",
+  "main": "app.ts",
   "scripts": {
     "start": "node --env-file-if-exists=.env --watch server.ts",
     "build": "node migrate.ts",
